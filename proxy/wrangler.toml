@@ -1,0 +1,8 @@
+name = "flashmem-proxy"
+main = "src/index.js"
+compatibility_date = "2026-10-21"
+workers_dev = false
+
+[[routes]]
+pattern = "flashmem.rojiura.app"
+custom_domain = true
