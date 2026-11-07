@@ -51,6 +51,7 @@ export class Room {
   correct = 0;
   flashStartedAt: number | null = null;
   flashEndsAt: number | null = null;
+  playPackage: { flashStartedAt: number; flashEndsAt: number } | null = null;
   finishedAt: number | null = null;
   lastActivity = Date.now();
   rng: () => number = Math.random;
@@ -172,6 +173,10 @@ export class Room {
     this.config.running = true;
     this.flashStartedAt = Date.now();
     this.flashEndsAt = this.flashStartedAt + Math.round(this.config.flashSeconds * 1000);
+    this.playPackage = {
+      flashStartedAt: this.flashStartedAt,
+      flashEndsAt: this.flashEndsAt,
+    };
     this.touch();
     this.broadcast();
     const wait = Math.max(0, this.flashEndsAt - Date.now());
@@ -190,6 +195,7 @@ export class Room {
     this.correct = 0;
     this.flashStartedAt = null;
     this.flashEndsAt = null;
+    this.playPackage = null;
     this.finishedAt = null;
     this.touch();
     this.broadcast();
@@ -269,6 +275,7 @@ export class Room {
       flashStartedAt: this.flashStartedAt,
       flashEndsAt: this.flashEndsAt,
       finishedAt: this.finishedAt,
+      playPackage: this.phase === "flash" ? this.playPackage : null,
       serverNow: Date.now(),
     };
   }

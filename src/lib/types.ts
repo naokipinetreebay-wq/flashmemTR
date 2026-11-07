@@ -29,6 +29,12 @@ export interface SlotView {
   correct: boolean | null;
 }
 
+/** 開始時のフラッシュ窓。端末時計で消灯する正本 */
+export interface PlayPackage {
+  flashStartedAt: number;
+  flashEndsAt: number;
+}
+
 export interface RoomSnapshot {
   code: string;
   config: RoomConfig;
@@ -44,6 +50,7 @@ export interface RoomSnapshot {
   flashStartedAt: number | null;
   flashEndsAt: number | null;
   finishedAt: number | null;
+  playPackage: PlayPackage | null;
   serverNow: number;
 }
 

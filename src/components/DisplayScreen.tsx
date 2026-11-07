@@ -59,16 +59,17 @@ export function DisplayScreen({
     };
   }, []);
 
+  const flashEndsAt = snapshot.playPackage?.flashEndsAt ?? snapshot.flashEndsAt;
+
   useEffect(() => {
-    if (snapshot.phase !== "flash" || snapshot.flashEndsAt == null) return;
-    const delay = snapshot.flashEndsAt - (Date.now() + skewRef.current);
+    if (snapshot.phase !== "flash" || flashEndsAt == null) return;
+    const delay = flashEndsAt - (Date.now() + skewRef.current);
     const id = setTimeout(() => setClock((n) => n + 1), Math.max(0, delay));
     return () => clearTimeout(id);
-  }, [snapshot.flashEndsAt, snapshot.phase, snapshot.serverNow]);
+  }, [flashEndsAt, snapshot.phase, snapshot.serverNow]);
 
   const now = Date.now() + skewRef.current;
-  const showing =
-    snapshot.phase === "flash" && (snapshot.flashEndsAt == null || now < snapshot.flashEndsAt);
+  const showing = snapshot.phase === "flash" && (flashEndsAt == null || now < flashEndsAt);
 
   const tap = (half: "left" | "right" | null) => {
     if (snapshot.phase !== "answer") return;
