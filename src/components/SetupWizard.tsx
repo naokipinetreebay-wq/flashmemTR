@@ -31,7 +31,7 @@ export function SetupWizard({
   const cfg = snapshot.config;
   const displayUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
-    return `${window.location.origin}/d/${snapshot.code}`;
+    return `${window.location.origin}/d/?code=${snapshot.code}`;
   }, [snapshot.code]);
   const joined = snapshot.displays.length;
   const online = snapshot.displays.filter((d) => d.connected).length;

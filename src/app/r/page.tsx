@@ -1,15 +1,14 @@
 "use client";
 
-import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CenterScreen } from "@/components/CenterScreen";
 import { ControllerPanel } from "@/components/ControllerPanel";
 import { SetupWizard } from "@/components/SetupWizard";
+import { useRoomCode } from "@/lib/roomCode";
 import { useDeviceId, useRoomSocket } from "@/lib/ws";
 
 export default function ControllerPage() {
-  const params = useParams<{ code: string }>();
-  const code = String(params.code || "").toUpperCase();
+  const code = useRoomCode();
   const deviceId = useDeviceId(`controller-${code}`);
   const { snapshot, error, connected, send } = useRoomSocket(code, "controller", deviceId);
 
