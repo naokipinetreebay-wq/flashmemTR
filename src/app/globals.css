@@ -309,3 +309,12 @@ button, input, select { font: inherit; }
 }
 .flash-split-review .peri-digit { font-size: 16vmin; }
 .flash-review .peri-score { font-size: min(14vw, 5.5rem); }
+
+.ad-video {
+  display: block;
+  width: 100%;
+  max-height: 52vh;
+  margin: 8px 0 18px;
+  border-radius: 10px;
+  background: #0a0a0a;
+}
