@@ -9,4 +9,10 @@
 - 全部答え終わると、正解は緑、不正解は赤。結果は正答 x/x
 - コントローラを含めて 3〜7 台。配置は周辺視タップと同じ
 
-ローカル確認: `npm install` のあと `npm test`、`npm run dev`。公開はまだしない。
+ローカル確認: `npm install` のあと `npm test`、`npm run dev`。
+
+## 公開 URL
+
+https://tr.rojiura.app/flashmem/  
+ルーム／WS: https://tr-api.rojiura.app  
+旧ホスト `https://flashmem.rojiura.app` は新 URL へ 301 します。
