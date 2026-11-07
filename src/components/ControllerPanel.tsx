@@ -4,6 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useMemo } from "react";
 import { SessionExit } from "@/components/SessionExit";
 import { placementsFor } from "@/lib/placement";
+import { displayJoinUrl } from "@/lib/roomCode";
 import {
   MAX_FLASH,
   MIN_FLASH,
@@ -29,7 +30,7 @@ export function ControllerPanel({
   const cfg = snapshot.config;
   const displayUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
-    return `${window.location.origin}/d/?code=${snapshot.code}`;
+    return displayJoinUrl(snapshot.code);
   }, [snapshot.code]);
   const slots = placementsFor(snapshot.displays.length);
   const placeByNo = new Map(slots.map((slot) => [slot.no, slot.clock]));

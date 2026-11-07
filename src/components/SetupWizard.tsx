@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { PlacementMap } from "@/components/PlacementMap";
 import { SessionExit } from "@/components/SessionExit";
 import { placementsFor } from "@/lib/placement";
+import { displayJoinUrl } from "@/lib/roomCode";
 import {
   MAX_FLASH,
   MIN_FLASH,
@@ -31,7 +32,7 @@ export function SetupWizard({
   const cfg = snapshot.config;
   const displayUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
-    return `${window.location.origin}/d/?code=${snapshot.code}`;
+    return displayJoinUrl(snapshot.code);
   }, [snapshot.code]);
   const joined = snapshot.displays.length;
   const online = snapshot.displays.filter((d) => d.connected).length;
