@@ -1,5 +1,7 @@
 "use client";
 
+import { NumberSelect } from "@/components/NumberSelect";
+
 import { QRCodeSVG } from "qrcode.react";
 import { useMemo, useState } from "react";
 import { PlacementMap } from "@/components/PlacementMap";
@@ -95,13 +97,12 @@ export function SetupWizard({
             </label>
             <label className="field">
               <span>表示: {cfg.flashSeconds.toFixed(1)}秒</span>
-              <input
-                type="range"
+              <NumberSelect
                 min={MIN_FLASH}
                 max={MAX_FLASH}
                 step={0.1}
                 value={cfg.flashSeconds}
-                onChange={(e) => patch({ flashSeconds: Number(e.target.value) })}
+                onChange={(n) => patch({ flashSeconds: n })}
               />
             </label>
             <label className="field check">
