@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { countdownDigit } from "@/lib/localEngine";
 import { placementsFor } from "@/lib/placement";
-import type { ClientMessage, RoomSnapshot, SlotView } from "@/lib/types";
+import type { RoomSnapshot, SlotView } from "@/lib/types";
 
 function mark(slot: SlotView) {
   if (slot.correct === true) return "○";
@@ -31,11 +31,12 @@ function Digit({ slot, colored }: { slot: SlotView; colored: boolean }) {
 export function DisplayScreen({
   snapshot,
   deviceId,
-  send,
+  sendGame,
 }: {
   snapshot: RoomSnapshot;
   deviceId: string;
-  send: (msg: ClientMessage) => void;
+  /** DataChannel 優先、なければ WS tap */
+  sendGame: (msg: unknown) => boolean;
 }) {
   const mine = snapshot.displays.find((d) => d.id === deviceId);
   const mineSlots = snapshot.slots.filter((slot) => slot.id === deviceId);
@@ -106,7 +107,7 @@ export function DisplayScreen({
     const at = Date.now();
     if (at - lock.current < 180) return;
     lock.current = at;
-    send({ type: "tap", deviceId, half });
+    sendGame({ type: "clientEvent", event: "tap", deviceId, half });
   };
 
   if (snapshot.phase === "idle") {

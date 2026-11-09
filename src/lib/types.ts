@@ -105,6 +105,12 @@ export type ClientMessage =
         running?: boolean;
       };
     }
+  | {
+      type: "signal";
+      from: string;
+      to: string;
+      payload: unknown;
+    }
   | { type: "ping" };
 
 export type ClientEventMessage = {
@@ -118,7 +124,13 @@ export type ServerMessage =
   | { type: "snapshot"; snapshot: RoomSnapshot }
   | ClientEventMessage
   | { type: "error"; message: string }
-  | { type: "pong" };
+  | { type: "pong" }
+  | {
+      type: "signal";
+      from: string;
+      to: string;
+      payload: unknown;
+    };
 
 export const DEFAULT_CONFIG: RoomConfig = {
   level: "easy",

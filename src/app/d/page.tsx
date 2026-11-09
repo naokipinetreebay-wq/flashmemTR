@@ -7,7 +7,7 @@ import { useDeviceId, useRoomSocket } from "@/lib/ws";
 export default function DisplayPage() {
   const code = useRoomCode();
   const deviceId = useDeviceId(`display-${code}`);
-  const { snapshot, error, connected, send } = useRoomSocket(code, "display", deviceId);
+  const { snapshot, error, connected, sendGame } = useRoomSocket(code, "display", deviceId);
 
   if (error && !snapshot) {
     return (
@@ -30,7 +30,7 @@ export default function DisplayPage() {
 
   return (
     <>
-      <DisplayScreen snapshot={snapshot} deviceId={deviceId} send={send} />
+      <DisplayScreen snapshot={snapshot} deviceId={deviceId} sendGame={sendGame} />
       {!connected ? <div className="status-bar">再接続中…</div> : null}
     </>
   );
