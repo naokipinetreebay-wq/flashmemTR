@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientMessage, Role, RoomSnapshot, ServerMessage } from "./types";
+import type {
+  ClientEventMessage,
+  ClientMessage,
+  Role,
+  RoomSnapshot,
+  ServerMessage,
+} from "./types";
 
 const PING_MS = 12_000;
 const RETRY_BASE_MS = 600;
@@ -33,6 +39,7 @@ export function useRoomSocket(room: string, role: Role, deviceId: string) {
   const [snapshot, setSnapshot] = useState<RoomSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [clientEvent, setClientEvent] = useState<ClientEventMessage | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -96,6 +103,7 @@ export function useRoomSocket(room: string, role: Role, deviceId: string) {
           return;
         }
         if (msg.type === "snapshot") setSnapshot(msg.snapshot);
+        if (msg.type === "clientEvent") setClientEvent(msg);
         if (msg.type === "error") setError(msg.message);
         if (msg.type === "pong") setError(null);
       };
@@ -150,7 +158,7 @@ export function useRoomSocket(room: string, role: Role, deviceId: string) {
     }
   }, []);
 
-  return { snapshot, error, connected, send };
+  return { snapshot, error, connected, send, clientEvent };
 }
 
 export async function createRoom(): Promise<string> {

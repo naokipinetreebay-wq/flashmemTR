@@ -22,12 +22,22 @@ export function ControllerPanel({
   send,
   clearSessionKeys,
   onShowCenter,
+  onStart,
+  onStop,
+  onBeginAnswer,
+  onOpenReview,
+  onReviewStep,
 }: {
   snapshot: RoomSnapshot;
   connected: boolean;
   send: (msg: ClientMessage) => void;
   clearSessionKeys?: string[];
   onShowCenter: () => void;
+  onStart?: () => void;
+  onStop?: () => void;
+  onBeginAnswer?: () => void;
+  onOpenReview?: () => void;
+  onReviewStep?: (delta: number) => void;
 }) {
   const cfg = snapshot.config;
   const displayUrl = useMemo(() => {
@@ -39,13 +49,19 @@ export function ControllerPanel({
   const online = snapshot.displays.filter((d) => d.connected).length;
   const canStart = connected && online >= 2 && snapshot.displays.length <= 6 && !cfg.running;
   const status =
-    snapshot.phase === "flash"
-      ? "表示中"
-      : snapshot.phase === "answer"
-        ? "答え"
-        : snapshot.phase === "review"
-          ? "答え合わせ"
-          : "待機";
+    snapshot.phase === "countdown"
+      ? "カウントダウン"
+      : snapshot.phase === "flash"
+        ? "表示中"
+        : snapshot.phase === "ready"
+          ? "記憶"
+          : snapshot.phase === "answer"
+            ? "回答中"
+            : snapshot.phase === "result"
+              ? "結果"
+              : snapshot.phase === "review"
+                ? "答え合わせ"
+                : "待機";
 
   const patch = (partial: Partial<RoomConfig>) => {
     if (cfg.running) return;
@@ -72,7 +88,9 @@ export function ControllerPanel({
           {status}
           {snapshot.phase === "answer"
             ? ` · ${Math.min(snapshot.questionTotal, snapshot.asked + 1)}/${snapshot.questionTotal}`
-            : ""}
+            : snapshot.phase === "review" && snapshot.reviewIndex != null
+              ? ` · ${snapshot.reviewIndex + 1}/${snapshot.answers.length || snapshot.questionTotal}`
+              : ""}
         </p>
         <div className="btn-row">
           <button
@@ -80,13 +98,51 @@ export function ControllerPanel({
             className="btn primary"
             disabled={!canStart}
             onClick={() => {
-              send({ type: "start" });
+              if (onStart) onStart();
+              else send({ type: "start", local: true });
               onShowCenter();
             }}
           >
-            {snapshot.phase === "review" ? "もう一度" : "開始"}
+            {snapshot.phase === "result" || snapshot.phase === "review" ? "もう一度" : "開始"}
           </button>
-          <button type="button" className="btn danger" onClick={() => send({ type: "stop" })}>
+          {snapshot.phase === "ready" ? (
+            <button type="button" className="btn primary" onClick={() => onBeginAnswer?.()}>
+              回答する
+            </button>
+          ) : null}
+          {snapshot.phase === "result" ? (
+            <button type="button" className="btn" onClick={() => onOpenReview?.()}>
+              答え合わせを見る
+            </button>
+          ) : null}
+          {snapshot.phase === "review" ? (
+            <>
+              <button
+                type="button"
+                className="btn"
+                disabled={(snapshot.reviewIndex ?? 0) <= 0}
+                onClick={() => onReviewStep?.(-1)}
+              >
+                前へ
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={
+                  snapshot.reviewIndex == null ||
+                  snapshot.reviewIndex >= (snapshot.answers.length || 1) - 1
+                }
+                onClick={() => onReviewStep?.(1)}
+              >
+                次へ
+              </button>
+            </>
+          ) : null}
+          <button
+            type="button"
+            className="btn danger"
+            onClick={() => (onStop ? onStop() : send({ type: "stop" }))}
+          >
             停止
           </button>
         </div>
@@ -141,7 +197,7 @@ export function ControllerPanel({
         <p className="muted">
           {!connected || online < 2
             ? "コントローラを含めて3台つながるまで開始できません。"
-            : "数字は重複しません。結果は正答 x/x です。"}
+            : "3→2→1のあと同時にフラッシュ。回答は正解を見せず、最後に答え合わせできます。"}
         </p>
       </section>
 
@@ -170,7 +226,10 @@ export function ControllerPanel({
         )}
       </section>
 
-      <SessionExit onStop={() => send({ type: "stop" })} clearSessionKeys={clearSessionKeys} />
+      <SessionExit
+        onStop={() => (onStop ? onStop() : send({ type: "stop" }))}
+        clearSessionKeys={clearSessionKeys}
+      />
     </div>
   );
 }

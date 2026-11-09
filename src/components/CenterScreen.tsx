@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ClientMessage, RoomSnapshot, SlotView } from "@/lib/types";
+import { countdownDigit } from "@/lib/localEngine";
+import type { ClientMessage, Half, RoomSnapshot, SlotView } from "@/lib/types";
 
 function useWakeLock() {
   useEffect(() => {
@@ -25,25 +26,45 @@ function useWakeLock() {
   }, []);
 }
 
+function mark(slot: SlotView) {
+  if (slot.correct === true) return "○";
+  if (slot.correct === false || slot.picked) return "×";
+  return "";
+}
+
 function tone(slot: SlotView, colored: boolean) {
   if (!colored) return "";
   if (slot.correct === true) return "cue-green";
-  if (slot.correct === false) return "cue-red";
+  if (slot.correct === false || slot.picked) return "cue-red";
   return "";
 }
 
 function Digit({ slot, colored }: { slot: SlotView; colored: boolean }) {
   const value = slot.value ?? "";
   const compact = typeof slot.value === "number" && slot.value >= 10;
-  return <span className={`peri-digit ${compact ? "compact" : ""} ${tone(slot, colored)}`}>{value}</span>;
+  const badge = colored ? mark(slot) : "";
+  return (
+    <span className={`peri-digit ${compact ? "compact" : ""} ${tone(slot, colored)}`}>
+      {value}
+      {badge ? <span className="flash-mark">{badge}</span> : null}
+    </span>
+  );
 }
 
 export function CenterScreen({
   snapshot,
   send,
+  onBeginAnswer,
+  onOpenReview,
+  onReviewStep,
+  onTap,
 }: {
   snapshot: RoomSnapshot;
   send?: (msg: ClientMessage) => void;
+  onBeginAnswer?: () => void;
+  onOpenReview?: () => void;
+  onReviewStep?: (delta: number) => void;
+  onTap?: (deviceId: string, half: Half | null) => void;
 }) {
   useWakeLock();
   const [, setClock] = useState(0);
@@ -54,38 +75,62 @@ export function CenterScreen({
     skewRef.current = snapshot.serverNow - Date.now();
   }
 
-  const flashEndsAt = snapshot.playPackage?.flashEndsAt ?? snapshot.flashEndsAt;
+  const pkg = snapshot.playPackage;
+  const flashEndsAt = pkg?.flashEndsAt ?? snapshot.flashEndsAt;
+  const flashStartedAt = pkg?.flashStartedAt ?? snapshot.flashStartedAt;
 
   useEffect(() => {
-    if (snapshot.phase !== "flash" || flashEndsAt == null) return;
-    const delay = flashEndsAt - (Date.now() + skewRef.current);
-    const id = setTimeout(() => setClock((n) => n + 1), Math.max(0, delay));
+    if (snapshot.phase !== "countdown" && snapshot.phase !== "flash") return;
+    const now = Date.now() + skewRef.current;
+    const nextAt =
+      snapshot.phase === "countdown" && pkg
+        ? Math.min(
+            pkg.countdownStartedAt +
+              (pkg.countdownFrom - (countdownDigit(pkg, now) ?? 1) + 1) * pkg.countdownMs,
+            pkg.flashStartedAt
+          )
+        : flashEndsAt;
+    if (nextAt == null) return;
+    const id = setTimeout(() => setClock((n) => n + 1), Math.max(0, nextAt - now));
     return () => clearTimeout(id);
-  }, [flashEndsAt, snapshot.phase, snapshot.serverNow]);
+  }, [flashEndsAt, flashStartedAt, pkg, snapshot.phase, snapshot.serverNow]);
 
   const centerSlots = snapshot.slots.filter((slot) => slot.id === "center");
   const now = Date.now() + skewRef.current;
-  const showing = snapshot.phase === "flash" && (flashEndsAt == null || now < flashEndsAt);
+  const count = pkg ? countdownDigit(pkg, now) : null;
+  const showing =
+    (snapshot.phase === "flash" ||
+      (snapshot.phase === "countdown" && count == null && flashStartedAt != null && now >= flashStartedAt)) &&
+    (flashEndsAt == null || now < flashEndsAt);
   const split = centerSlots.length > 1;
 
-  const tap = (half: "left" | "right" | null) => {
-    send?.({ type: "tap", deviceId: "center", half });
+  const tap = (half: Half | null) => {
+    if (onTap) onTap("center", half);
+    else send?.({ type: "tap", deviceId: "center", half });
   };
 
-  if (snapshot.phase === "review") {
+  if (snapshot.phase === "countdown" && count != null) {
+    return (
+      <div className="peri-center flash-countdown">
+        <span className="flash-countdown-digit">{count}</span>
+      </div>
+    );
+  }
+
+  if (snapshot.phase === "ready") {
+    return (
+      <div className="peri-center flash-ready">
+        <p className="muted">覚えましたか？</p>
+        <button type="button" className="btn primary" onClick={() => onBeginAnswer?.()}>
+          回答する
+        </button>
+      </div>
+    );
+  }
+
+  if (snapshot.phase === "result") {
     return (
       <div className="peri-center flash-review">
-        {split ? (
-          <div className="flash-split flash-split-review">
-            {centerSlots.map((slot) => (
-              <div key={slot.half ?? "only"} className="flash-half">
-                <Digit slot={slot} colored />
-              </div>
-            ))}
-          </div>
-        ) : centerSlots[0] ? (
-          <Digit slot={centerSlots[0]} colored />
-        ) : null}
         <span className="peri-result">
           <span className="peri-result-label">正答</span>
           <span className="peri-score">
@@ -93,6 +138,64 @@ export function CenterScreen({
             <span className="peri-score-denom">/{snapshot.questionTotal}</span>
           </span>
         </span>
+        <button type="button" className="btn" onClick={() => onOpenReview?.()}>
+          答え合わせを見る
+        </button>
+      </div>
+    );
+  }
+
+  if (snapshot.phase === "review") {
+    const answer =
+      snapshot.reviewIndex != null ? snapshot.answers[snapshot.reviewIndex] : null;
+    return (
+      <div className="peri-center flash-review">
+        <div className="flash-prompt">
+          <span className="flash-prompt-label">答え合わせ</span>
+          <span className={`peri-digit ${answer && answer.prompt >= 10 ? "compact" : ""}`}>
+            {answer?.prompt ?? snapshot.prompt ?? ""}
+          </span>
+          <span className="flash-progress">
+            {(snapshot.reviewIndex ?? 0) + 1}/{snapshot.answers.length || snapshot.questionTotal}
+          </span>
+          <span className={`flash-verdict ${answer?.hit ? "ok" : "bad"}`}>
+            {answer?.hit ? "○" : "×"}
+          </span>
+        </div>
+        {centerSlots.length > 0 ? (
+          split ? (
+            <div className="flash-split flash-split-review">
+              {centerSlots.map((slot) => (
+                <div key={slot.half ?? "only"} className="flash-half">
+                  <Digit slot={slot} colored />
+                </div>
+              ))}
+            </div>
+          ) : centerSlots[0] ? (
+            <Digit slot={centerSlots[0]} colored />
+          ) : null
+        ) : null}
+        <div className="btn-row">
+          <button
+            type="button"
+            className="btn"
+            disabled={(snapshot.reviewIndex ?? 0) <= 0}
+            onClick={() => onReviewStep?.(-1)}
+          >
+            前へ
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={
+              snapshot.reviewIndex == null ||
+              snapshot.reviewIndex >= (snapshot.answers.length || 1) - 1
+            }
+            onClick={() => onReviewStep?.(1)}
+          >
+            次へ
+          </button>
+        </div>
       </div>
     );
   }

@@ -1,15 +1,19 @@
 import { WebSocket } from "ws";
 import { deal, samePlace, shuffle, type DealtSlot } from "../lib/deal";
 import {
+  COUNTDOWN_FROM,
+  COUNTDOWN_MS,
   DEFAULT_CONFIG,
   MAX_FLASH,
   MAX_PERIPHERALS,
   MIN_FLASH,
   MIN_PERIPHERALS,
   clamp,
+  type AnswerRecord,
   type DisplayInfo,
   type Half,
   type Phase,
+  type PlayPackage,
   type RoomConfig,
   type RoomSnapshot,
   type SlotView,
@@ -51,8 +55,10 @@ export class Room {
   correct = 0;
   flashStartedAt: number | null = null;
   flashEndsAt: number | null = null;
-  playPackage: { flashStartedAt: number; flashEndsAt: number } | null = null;
+  playPackage: PlayPackage | null = null;
   finishedAt: number | null = null;
+  answers: AnswerRecord[] = [];
+  reviewIndex: number | null = null;
   lastActivity = Date.now();
   rng: () => number = Math.random;
 
@@ -147,6 +153,7 @@ export class Room {
   private liveIds(): string[] {
     return [...this.displays.values()]
       .filter((d) => d.socket && d.socket.readyState === WebSocket.OPEN)
+      .sort((a, b) => a.place - b.place)
       .map((d) => d.id);
   }
 
@@ -154,7 +161,7 @@ export class Room {
     return [...this.controllers].some((socket) => socket.readyState === WebSocket.OPEN);
   }
 
-  start() {
+  start(opts?: { skipCountdown?: boolean }) {
     const ids = this.liveIds();
     if (!this.hasController() || ids.length < MIN_PERIPHERALS || this.displays.size > MAX_PERIPHERALS) {
       this.broadcast();
@@ -162,25 +169,52 @@ export class Room {
     }
     this.clearTimer();
     this.slots = deal(ids, this.config.centerNumber, this.config.split, this.config.level, this.rng);
-    this.order = shuffle(this.slots.map((_, index) => index), this.rng);
+    this.order = shuffle(
+      this.slots.map((_, index) => index),
+      this.rng
+    );
     this.promptIndex = 0;
     this.prompt = null;
     this.asked = 0;
     this.correct = 0;
+    this.answers = [];
+    this.reviewIndex = null;
     this.finishedAt = null;
     this.lastTapAt = 0;
-    this.phase = "flash";
     this.config.running = true;
-    this.flashStartedAt = Date.now();
+    const now = Date.now();
+    if (opts?.skipCountdown) {
+      this.flashStartedAt = now;
+      this.flashEndsAt = now + Math.round(this.config.flashSeconds * 1000);
+      this.playPackage = {
+        countdownStartedAt: now,
+        countdownFrom: 0,
+        countdownMs: COUNTDOWN_MS,
+        flashStartedAt: this.flashStartedAt,
+        flashEndsAt: this.flashEndsAt,
+      };
+      this.phase = "flash";
+      this.touch();
+      this.broadcast();
+      this.timer = setTimeout(
+        () => this.enterReady(),
+        Math.max(0, this.flashEndsAt - Date.now())
+      );
+      return;
+    }
+    this.flashStartedAt = now + COUNTDOWN_FROM * COUNTDOWN_MS;
     this.flashEndsAt = this.flashStartedAt + Math.round(this.config.flashSeconds * 1000);
     this.playPackage = {
+      countdownStartedAt: now,
+      countdownFrom: COUNTDOWN_FROM,
+      countdownMs: COUNTDOWN_MS,
       flashStartedAt: this.flashStartedAt,
       flashEndsAt: this.flashEndsAt,
     };
+    this.phase = "countdown";
     this.touch();
     this.broadcast();
-    const wait = Math.max(0, this.flashEndsAt - Date.now());
-    this.timer = setTimeout(() => this.openAnswers(), wait);
+    this.timer = setTimeout(() => this.enterFlash(), Math.max(0, this.flashStartedAt - Date.now()));
   }
 
   stop() {
@@ -193,10 +227,40 @@ export class Room {
     this.promptIndex = 0;
     this.asked = 0;
     this.correct = 0;
+    this.answers = [];
+    this.reviewIndex = null;
     this.flashStartedAt = null;
     this.flashEndsAt = null;
     this.playPackage = null;
     this.finishedAt = null;
+    this.touch();
+    this.broadcast();
+  }
+
+  beginAnswer() {
+    if (this.phase !== "ready" && this.phase !== "flash") return;
+    this.clearTimer();
+    this.phase = "answer";
+    this.promptIndex = 0;
+    this.prompt = this.slots[this.order[0]]?.value ?? null;
+    this.touch();
+    this.broadcast();
+  }
+
+  openReview() {
+    if (this.phase !== "result" && this.phase !== "review") return;
+    this.phase = "review";
+    this.reviewIndex = 0;
+    this.prompt = this.answers[0]?.prompt ?? null;
+    this.touch();
+    this.broadcast();
+  }
+
+  reviewStep(delta: number) {
+    if (this.phase !== "review" || this.answers.length === 0) return;
+    const next = Math.max(0, Math.min(this.answers.length - 1, (this.reviewIndex ?? 0) + delta));
+    this.reviewIndex = next;
+    this.prompt = this.answers[next]?.prompt ?? null;
     this.touch();
     this.broadcast();
   }
@@ -209,12 +273,19 @@ export class Room {
     if (!slot) return;
     this.lastTapAt = now;
     const hit = samePlace(slot, deviceId, half);
-    slot.correct = hit;
+    this.answers.push({
+      prompt: slot.value,
+      correctId: slot.id,
+      correctHalf: slot.half,
+      userId: deviceId,
+      userHalf: half,
+      hit,
+    });
     if (hit) this.correct += 1;
     this.asked += 1;
     this.promptIndex += 1;
     if (this.promptIndex >= this.order.length) {
-      this.phase = "review";
+      this.phase = "result";
       this.config.running = false;
       this.finishedAt = Date.now();
       this.prompt = null;
@@ -235,10 +306,19 @@ export class Room {
     return this.slots.map((slot) => ({ ...slot }));
   }
 
-  private openAnswers() {
+  private enterFlash() {
+    if (this.phase !== "countdown") return;
+    this.phase = "flash";
+    this.touch();
+    this.broadcast();
+    const wait = Math.max(0, (this.flashEndsAt ?? Date.now()) - Date.now());
+    this.timer = setTimeout(() => this.enterReady(), wait);
+  }
+
+  private enterReady() {
     if (this.phase !== "flash") return;
-    this.phase = "answer";
-    this.prompt = this.slots[this.order[0]]?.value ?? null;
+    this.phase = "ready";
+    this.playPackage = null;
     this.touch();
     this.broadcast();
   }
@@ -248,6 +328,32 @@ export class Room {
     this.timer = null;
   }
 
+  private publicSlots(): SlotView[] {
+    const hideValues = this.phase === "answer" || this.phase === "ready";
+    const review =
+      this.phase === "review" && this.reviewIndex != null
+        ? this.answers[this.reviewIndex]
+        : null;
+    return this.slots.map((slot) => {
+      let correct: boolean | null = null;
+      let picked: boolean | null = null;
+      if (review) {
+        const isCorrectPlace = samePlace(slot, review.correctId, review.correctHalf);
+        const isPicked = samePlace(slot, review.userId, review.userHalf);
+        picked = isPicked;
+        if (isCorrectPlace) correct = true;
+        else if (isPicked) correct = false;
+      }
+      return {
+        id: slot.id,
+        half: slot.half,
+        value: hideValues ? null : slot.value,
+        correct,
+        picked,
+      };
+    });
+  }
+
   snapshot(): RoomSnapshot {
     const displays: DisplayInfo[] = [...this.displays.values()].map((d) => ({
       id: d.id,
@@ -255,19 +361,12 @@ export class Room {
       place: d.place,
       connected: !!d.socket && d.socket.readyState === WebSocket.OPEN,
     }));
-    const hideValues = this.phase === "answer";
-    const slots: SlotView[] = this.slots.map((slot) => ({
-      id: slot.id,
-      half: slot.half,
-      value: hideValues ? null : slot.value,
-      correct: slot.correct,
-    }));
     return {
       code: this.code,
       config: this.config,
       displays,
       phase: this.phase,
-      slots,
+      slots: this.publicSlots(),
       prompt: this.prompt,
       asked: this.asked,
       questionTotal: this.slots.length,
@@ -275,7 +374,10 @@ export class Room {
       flashStartedAt: this.flashStartedAt,
       flashEndsAt: this.flashEndsAt,
       finishedAt: this.finishedAt,
-      playPackage: this.phase === "flash" ? this.playPackage : null,
+      playPackage:
+        this.phase === "countdown" || this.phase === "flash" ? this.playPackage : null,
+      reviewIndex: this.reviewIndex,
+      answers: this.phase === "result" || this.phase === "review" ? [...this.answers] : [],
       serverNow: Date.now(),
     };
   }

@@ -1,7 +1,15 @@
 export type Role = "controller" | "display";
 export type Level = "easy" | "hard";
 export type Half = "left" | "right";
-export type Phase = "idle" | "flash" | "answer" | "review";
+/** countdown→flash→ready→answer→result→review */
+export type Phase =
+  | "idle"
+  | "countdown"
+  | "flash"
+  | "ready"
+  | "answer"
+  | "result"
+  | "review";
 
 export interface RoomConfig {
   level: Level;
@@ -27,12 +35,26 @@ export interface SlotView {
   /** 答え合わせ中は場所が分からないよう、数値を配らない */
   value: number | null;
   correct: boolean | null;
+  /** 答え合わせ: ユーザーがこの枠を選んだか */
+  picked: boolean | null;
 }
 
-/** 開始時のフラッシュ窓。端末時計で消灯する正本 */
+/** カウントダウン〜フラッシュ窓。端末時計で再生する正本 */
 export interface PlayPackage {
+  countdownStartedAt: number;
+  countdownFrom: number;
+  countdownMs: number;
   flashStartedAt: number;
   flashEndsAt: number;
+}
+
+export interface AnswerRecord {
+  prompt: number;
+  correctId: string;
+  correctHalf: Half | null;
+  userId: string;
+  userHalf: Half | null;
+  hit: boolean;
 }
 
 export interface RoomSnapshot {
@@ -51,6 +73,9 @@ export interface RoomSnapshot {
   flashEndsAt: number | null;
   finishedAt: number | null;
   playPackage: PlayPackage | null;
+  /** 答え合わせの何問目（0始まり）。review 以外は null */
+  reviewIndex: number | null;
+  answers: AnswerRecord[];
   serverNow: number;
 }
 
@@ -58,13 +83,40 @@ export type ClientMessage =
   | { type: "hello"; role: Role; deviceId: string; label?: string }
   | { type: "updateConfig"; config: Partial<RoomConfig> }
   | { type: "setLabel"; deviceId: string; label: string }
-  | { type: "start" }
+  | { type: "start"; local?: boolean }
   | { type: "stop" }
   | { type: "tap"; deviceId: string; half?: Half | null }
+  | {
+      type: "hostPush";
+      overlay: {
+        playPackage?: PlayPackage | null;
+        phase?: Phase;
+        slots?: SlotView[];
+        prompt?: number | null;
+        asked?: number;
+        questionTotal?: number;
+        correct?: number;
+        flashStartedAt?: number | null;
+        flashEndsAt?: number | null;
+        finishedAt?: number | null;
+        reviewIndex?: number | null;
+        answers?: AnswerRecord[];
+        hostNow?: number;
+        running?: boolean;
+      };
+    }
   | { type: "ping" };
+
+export type ClientEventMessage = {
+  type: "clientEvent";
+  event: "tap";
+  deviceId: string;
+  half: Half | null;
+};
 
 export type ServerMessage =
   | { type: "snapshot"; snapshot: RoomSnapshot }
+  | ClientEventMessage
   | { type: "error"; message: string }
   | { type: "pong" };
 
@@ -80,6 +132,9 @@ export const MIN_PERIPHERALS = 2;
 export const MAX_PERIPHERALS = 6;
 export const MIN_FLASH = 0.1;
 export const MAX_FLASH = 1;
+
+export const COUNTDOWN_FROM = 3;
+export const COUNTDOWN_MS = 1000;
 
 export function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));

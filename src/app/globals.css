@@ -316,6 +316,33 @@ button, input, select { font: inherit; }
 }
 .flash-split-review .peri-digit { font-size: 16vmin; }
 .flash-review .peri-score { font-size: min(14vw, 5.5rem); }
+.flash-countdown-digit {
+  font-size: min(42vw, 12rem);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+.peri-center.flash-ready,
+.peri-center.flash-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+.flash-mark {
+  display: block;
+  font-size: 0.45em;
+  line-height: 1;
+  margin-top: 0.1em;
+}
+.flash-verdict {
+  font-size: min(18vw, 4rem);
+  font-weight: 900;
+}
+.flash-verdict.ok { color: #0a7a32; }
+.flash-verdict.bad { color: #c1121f; }
+.peri-digit { position: relative; }
 
 .ad-video {
   display: block;

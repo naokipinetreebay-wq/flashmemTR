@@ -50,17 +50,23 @@ async function play() {
     room.addDisplay(fakeSocket(), "b");
     room.updateConfig({ level: "easy", flashSeconds: 0.1, centerNumber: false, split: false });
     room.start();
+    assert(room.snapshot().phase === "countdown", "countdown starts");
+    assert(room.snapshot().playPackage?.countdownFrom === 3, "3-2-1 package");
+
+    room.start({ skipCountdown: true });
     assert(room.snapshot().phase === "flash", "flash starts");
     assert(room.snapshot().slots.every((slot) => slot.value != null), "numbers are visible during the flash");
     assert(room.secretSlots().every((slot) => slot.id !== "center"), "center stays blank when that option is off");
     await sleep(180);
-    assert(room.snapshot().phase === "answer", "answering starts after the flash");
+    assert(room.snapshot().phase === "ready", "ready waits for 回答する");
+    room.beginAnswer();
+    assert(room.snapshot().phase === "answer", "answering starts after 回答する");
     assert(room.snapshot().slots.every((slot) => slot.value == null), "answers stay hidden");
     assert(room.snapshot().prompt != null, "the controller shows one number");
-    const wrong = room.secretCurrent();
     room.tap("center", null);
     assert(room.snapshot().correct === 0, "tapping the center misses when it had no number");
-    assert(room.secretSlots().find((slot) => slot.value === wrong?.value)?.correct === false, "that number is marked wrong");
+    assert(room.snapshot().asked === 1, "miss is counted without revealing ○×");
+    assert(room.snapshot().slots.every((slot) => slot.correct == null), "no ○× during answer");
 
     const splitRoom = new Room("TEST02");
     try {
@@ -68,8 +74,9 @@ async function play() {
       splitRoom.addDisplay(fakeSocket(), "a");
       splitRoom.addDisplay(fakeSocket(), "b");
       splitRoom.updateConfig({ level: "hard", flashSeconds: 0.1, centerNumber: true, split: true });
-      splitRoom.start();
+      splitRoom.start({ skipCountdown: true });
       await sleep(180);
+      splitRoom.beginAnswer();
       const current = splitRoom.secretCurrent();
       assert(current?.half === "left" || current?.half === "right", "split answers have a side");
       const other = current?.half === "left" ? "right" : "left";
@@ -83,9 +90,11 @@ async function play() {
         await sleep(150);
       }
       const done = splitRoom.snapshot();
-      assert(done.phase === "review", "review after every number");
+      assert(done.phase === "result", "result after every number");
       assert(done.correct === done.questionTotal - 1, "one miss and the rest correct");
-      assert(done.slots.every((slot) => slot.value != null), "review shows the numbers again");
+      splitRoom.openReview();
+      assert(splitRoom.snapshot().phase === "review", "optional 答え合わせ");
+      assert(splitRoom.snapshot().slots.some((slot) => slot.correct === true), "review marks ○");
       const values = splitRoom.secretSlots().map((slot) => slot.value);
       assert(new Set(values).size === values.length, "split hard mode stays unique");
       assert(values.some((value) => value >= 10), "split hard mode includes two digits");
